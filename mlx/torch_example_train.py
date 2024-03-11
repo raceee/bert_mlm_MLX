@@ -74,6 +74,7 @@ def mask_tokens(inputs, tokenizer, mlm_probability=0.15):
     
     # Initialize the probability matrix with mlm_probability
     probability_matrix = torch.full(labels.shape, mlm_probability)
+    print("PROBABILTY MATRIX", probability_matrix.shape, probability_matrix)
     
     # Manually create a special tokens mask
     special_tokens_mask = torch.tensor(
@@ -101,6 +102,46 @@ def mask_tokens(inputs, tokenizer, mlm_probability=0.15):
 
     return inputs, labels
 
+import numpy as np
+
+def numpy_mask_tokens_np(inputs, tokenizer, mlm_probability=0.15):
+    """Prepare masked tokens inputs/labels for masked language modeling using NumPy."""
+    labels = np.array(inputs['input_ids'])  # Clone input_ids using NumPy
+
+    # Manually fetch special token IDs, falling back to default if unavailable
+    cls_token_id = tokenizer.token_to_id(tokenizer.cls_token) if hasattr(tokenizer, 'cls_token') else None
+    sep_token_id = tokenizer.token_to_id(tokenizer.sep_token) if hasattr(tokenizer, 'sep_token') else None
+    pad_token_id = tokenizer.token_to_id(tokenizer.pad_token) if hasattr(tokenizer, 'pad_token') else None
+
+    # Initialize the probability matrix with mlm_probability
+    probability_matrix = np.full(labels.shape, mlm_probability)
+    
+    # Manually create a special tokens mask
+    special_tokens_mask = np.array(
+        [[tok in [cls_token_id, sep_token_id, pad_token_id] for tok in val] for val in labels.tolist()],
+        dtype=bool
+    )
+    
+    # Apply the special tokens mask
+    probability_matrix[special_tokens_mask] = 0.0
+    if pad_token_id is not None:
+        padding_mask = labels == pad_token_id
+        probability_matrix[padding_mask] = 0.0
+    
+    # Generate masked indices
+    masked_indices = np.random.rand(*labels.shape) < probability_matrix
+    labels[~masked_indices] = -100  # Set labels for unmasked tokens to -100
+
+    # Mask 80% of the time
+    indices_replaced = (np.random.rand(*labels.shape) < 0.8) & masked_indices
+    inputs['input_ids'][indices_replaced] = tokenizer.token_to_id(tokenizer.mask_token)
+    
+    # Replace 10% of the time with random word
+    indices_random = (np.random.rand(*labels.shape) < 0.1) & masked_indices & ~indices_replaced
+    random_words = np.random.randint(0, tokenizer.get_vocab_size(), size=labels.shape)
+    inputs['input_ids'][indices_random] = random_words[indices_random]
+
+    return inputs, labels
 
 if __name__ == "__main__":
     # Configuration
@@ -121,7 +162,7 @@ if __name__ == "__main__":
     dataset = MLM_Dataset(texts, tokenizer, max_length)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = BertForMaskedLM.from_pretrained(model_name)
+    model = BertForMaskedLM.from_pretrained(model_name) # for mlx this needs to be changed to the bert port
     model.to(device)
     model.train()
 
