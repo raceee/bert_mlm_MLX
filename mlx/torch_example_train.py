@@ -1,4 +1,4 @@
-import mlx.core as mx
+# import mlx.core as mx
 import os
 from tokenizers import Tokenizer
 import torch
@@ -24,9 +24,9 @@ class MLM_Dataset(Dataset):
     def __len__(self):
         return len(self.texts)
     
-    def custom_encode_plus(self, padding='max_length', return_tensors=None):
+    def custom_encode_plus(self, text, padding='max_length', return_tensors=None):
         # Tokenize input text
-        encoded = tokenizer.encode(self.text)
+        encoded = tokenizer.encode(text)
         
         # Truncate to max_length if specified
         tokens = encoded.ids[:self.max_length]
@@ -56,10 +56,9 @@ class MLM_Dataset(Dataset):
 
     def __getitem__(self, idx):
         text = self.texts[idx]
-        inputs = self.encode_plus(
-            max_length=self.max_length,
+        inputs = self.custom_encode_plus(text,
             padding='max_length',
-            return_tensors='np'
+            return_tensors='pt'
         )
         inputs = {k: v.squeeze(0) for k, v in inputs.items()}  # Remove batch dimension
         return inputs
@@ -67,26 +66,42 @@ class MLM_Dataset(Dataset):
 def mask_tokens(inputs, tokenizer, mlm_probability=0.15):
     """Prepare masked tokens inputs/labels for masked language modeling."""
     labels = inputs['input_ids'].clone()
+    
+    # Attempt to manually fetch special token IDs, falling back to default if unavailable
+    cls_token_id = tokenizer.token_to_id(tokenizer.cls_token) if hasattr(tokenizer, 'cls_token') else None
+    sep_token_id = tokenizer.token_to_id(tokenizer.sep_token) if hasattr(tokenizer, 'sep_token') else None
+    pad_token_id = tokenizer.token_to_id(tokenizer.pad_token) if hasattr(tokenizer, 'pad_token') else None
+    
+    # Initialize the probability matrix with mlm_probability
     probability_matrix = torch.full(labels.shape, mlm_probability)
-    special_tokens_mask = [tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()]
-    probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
-    padding_mask = labels.eq(tokenizer.pad_token_id)
-    probability_matrix.masked_fill_(padding_mask, value=0.0)
+    
+    # Manually create a special tokens mask
+    special_tokens_mask = torch.tensor(
+        [[tok in [cls_token_id, sep_token_id, pad_token_id] for tok in val] for val in labels.tolist()], 
+        dtype=torch.bool
+    )
+    
+    probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
+    if pad_token_id is not None:
+        padding_mask = labels.eq(pad_token_id)
+        probability_matrix.masked_fill_(padding_mask, value=0.0)
+    
+    # Generate masked indices
     masked_indices = torch.bernoulli(probability_matrix).bool()
-    labels[~masked_indices] = -100  # We only compute loss on masked tokens
-
+    labels[~masked_indices] = -100  # Only compute loss on masked tokens
+    
     # Mask 80% of the time
     indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
-    inputs['input_ids'][indices_replaced] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
-
+    inputs['input_ids'][indices_replaced] = tokenizer.token_to_id(tokenizer.mask_token)
+    
     # Replace 10% of the time with random word
-    indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-    random_words = torch.randint(len(tokenizer), labels.shape, dtype=torch.long)
+    indices_random = torch.bernoulli(torch.full(labels.shape, 0.1)).bool() & masked_indices & ~indices_replaced
+    random_words = torch.randint(tokenizer.get_vocab_size(), labels.shape, dtype=torch.long)
     inputs['input_ids'][indices_random] = random_words[indices_random]
 
-    # The rest of the time (10%) we keep the original tokens unchanged
-
     return inputs, labels
+
+
 if __name__ == "__main__":
     # Configuration
     model_name = 'bert-base-uncased'
@@ -95,30 +110,36 @@ if __name__ == "__main__":
     batch_size = 16
     epochs = 3
     tokenizer = load_tokenizer()
+    tokenizer.mask_token = "[MASK]"
+    tokenizer.pad_token = "[PAD]"
 
     # Load data
-    with open("./eo.txt/eo_test.txt", "r") as f:
+    with open("./eo.txt/eo_test.txt", "r", encoding="utf-8") as f:
         texts = f.readlines()
         texts = [text.strip() for text in texts if text.strip()]
 
     dataset = MLM_Dataset(texts, tokenizer, max_length)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = BertForMaskedLM.from_pretrained(model_name)
+    model.to(device)
+    model.train()
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
 
     for epoch in range(epochs):
         loop = tqdm(dataloader, leave=True)
         for batch in loop:
             batch_inputs, labels = mask_tokens(batch, tokenizer, mlm_probability)
-            print("BATCH INPUTS: ", batch_inputs)
-            print("LABELS", labels)
-            # batch_inputs = {k: v.to(device) for k, v in batch_inputs.items()}
-            # labels = labels.to(device)
+            batch_inputs = {k: v.to(device) for k, v in batch_inputs.items()}
+            labels = labels.to(device)
 
-            # outputs = model(**batch_inputs, labels=labels)
-            # loss = outputs.loss
+            outputs = model(**batch_inputs, labels=labels)
+            loss = outputs.loss
 
-            # optimizer.zero_grad()
-            # loss.backward()
-            # optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-            # loop.set_description(f'Epoch {epoch}')
-            # loop.set_postfix(loss=loss.item())
+            loop.set_description(f'Epoch {epoch}')
+            loop.set_postfix(loss=loss.item())

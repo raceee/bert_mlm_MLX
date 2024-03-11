@@ -4,13 +4,15 @@ from transformers import PreTrainedTokenizerFast
 from transformers import BertForMaskedLM
 from transformers import Trainer, TrainingArguments
 import time
+import torch
 
 tokenizer = PreTrainedTokenizerFast(tokenizer_file="./eo_tokenizer.json")
 tokenizer.mask_token = "[MASK]"
+tokenizer.pad_token = "[PAD]"
 
 dataset = LineByLineTextDataset(
     tokenizer=tokenizer,
-    file_path="./eo.txt/eo.txt",
+    file_path="./eo.txt/eo_test.txt",
     block_size=128,  # This is the maximum length of a sequence. Adjust based on your model's limitations.
 )
 
@@ -19,12 +21,15 @@ data_collator = DataCollatorForLanguageModeling(
 )
 
 model = BertForMaskedLM.from_pretrained("bert-base-uncased")
+if torch.cuda.is_available():
+    print("Moving model to cuda...")
+    model.to("cuda")
 # You might want to adjust the model configuration to better suit your needs.
 
 training_args = TrainingArguments(
     output_dir="./hf_esperanto_bert",
     overwrite_output_dir=True,
-    num_train_epochs=5,
+    num_train_epochs=100,
     per_device_train_batch_size=4,
     save_steps=10_000,
     save_total_limit=2,
