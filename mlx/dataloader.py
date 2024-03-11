@@ -1,9 +1,9 @@
 class MLXDataloader:
-    def __init__(self, dataset, batch_size, shuffle, num_workers):
+    def __init__(self, dataset, batch_size, shuffle):
         self.dataset = dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
-        self.num_workers = num_workers
+        # self.num_workers = num_workers
     
     def __iter__(self):
         for i in range(0, len(self.dataset), self.batch_size):
