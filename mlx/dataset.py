@@ -51,7 +51,6 @@ class MLXDataset:
                 output['attention_mask'] = torch.tensor([output['attention_mask']])
             
             else:
-                print("Yoink", output['input_ids'])
                 output['input_ids'] = mx.array([output['input_ids']])
                 output['attention_mask'] = mx.array([output['attention_mask']])
             
