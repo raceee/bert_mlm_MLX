@@ -70,19 +70,15 @@ def mlm_eval_fn(predictions, labels):
     predictions_np = np.array(predictions)
     labels_np = np.array(labels)
 
-    # Create a mask for valid labels
     valid_labels_mask = labels_np != -100
 
-    # Apply the mask
     filtered_predictions = np.argmax(predictions_np, axis=-1)[valid_labels_mask]
     filtered_labels = labels_np[valid_labels_mask]
 
-    # Calculate accuracy
     correct_predictions = (filtered_predictions == filtered_labels).sum()
     total_predictions = valid_labels_mask.sum()
 
-    # Convert back to MLX array for returning if necessary, or return as a NumPy scalar
-    accuracy = correct_predictions / total_predictions
+    accuracy = correct_predictions / total_predictions # convert back to mlx array
     return accuracy
 
 
