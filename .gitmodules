@@ -1,0 +1,3 @@
+[submodule "mlx/mlx/mlx_examples"]
+	path = mlx/mlx/mlx_examples
+	url = https://github.com/ml-explore/mlx-examples.git

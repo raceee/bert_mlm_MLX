@@ -1,18 +1,12 @@
 import mlx.core as mx
+from mlx_examples.bert.model import load_model
+from mlx.optimizers import AdamW
+from mlx_examples.bert.convert import convert
+import mlx.nn as nn
 from tokenizers import Tokenizer
-import os
-from tokenizers import Tokenizer
-import torch
 import numpy as np
-from transformers import BertTokenizer, BertForMaskedLM
-from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
-from bert.model import Bert, load_model
 from dataloader import MLXDataloader
 from dataset import MLXDataset
-from mlx.optimizers import AdamW
-from bert.convert import convert
-import mlx.nn as nn
 import time
 
 def mask_tokens(inputs, tokenizer, mlm_probability=0.15):
@@ -98,7 +92,7 @@ def train_one_epoch(model, data_loader, optimizer):
         loss, grads = loss_and_grads_fn()
         # Update model parameters
         print("Updating model")
-        optimizer.update(model.trainable_parameters(), grads)
+        optimizer.update(model.trainable_parameters(), grads) # TODO: #1 hangs on Epoch 9?
 
 
 if __name__ == "__main__":
@@ -113,7 +107,6 @@ if __name__ == "__main__":
     tokenizer.pad_token = "[PAD]"
     # convert("bert-base-uncased", "./mlx/weights/bert-base-uncased.npz")
     model, _ = load_model("bert-base-uncased", "./mlx/weights/bert-base-uncased.npz")
-    # print(type(model))
     model.train()
 
     with open("./eo.txt/eo_test.txt", "r", encoding="utf-8") as f:
