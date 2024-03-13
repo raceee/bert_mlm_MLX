@@ -65,21 +65,21 @@ def mlm_loss_fn(predictions, labels):
     return mx.mean(nn.losses.cross_entropy(filtered_predictions_mx, filtered_labels_mx))
 
 
-def mlm_eval_fn(predictions, labels):
-    # Convert MLX arrays to NumPy for manipulation
-    predictions_np = np.array(predictions)
-    labels_np = np.array(labels)
+# def mlm_eval_fn(predictions, labels):
+#     # Convert MLX arrays to NumPy for manipulation
+#     predictions_np = np.array(predictions)
+#     labels_np = np.array(labels)
 
-    valid_labels_mask = labels_np != -100
+#     valid_labels_mask = labels_np != -100
 
-    filtered_predictions = np.argmax(predictions_np, axis=-1)[valid_labels_mask]
-    filtered_labels = labels_np[valid_labels_mask]
+#     filtered_predictions = np.argmax(predictions_np, axis=-1)[valid_labels_mask]
+#     filtered_labels = labels_np[valid_labels_mask]
 
-    correct_predictions = (filtered_predictions == filtered_labels).sum()
-    total_predictions = valid_labels_mask.sum()
+#     correct_predictions = (filtered_predictions == filtered_labels).sum()
+#     total_predictions = valid_labels_mask.sum()
 
-    accuracy = correct_predictions / total_predictions # convert back to mlx array
-    return accuracy
+#     accuracy = correct_predictions / total_predictions # convert back to mlx array
+#     return accuracy
 
 
 def train_one_epoch(model, data_loader, optimizer):
@@ -93,10 +93,11 @@ def train_one_epoch(model, data_loader, optimizer):
         attention_masks = mx.stack([item[0]['attention_mask'] for item in out], axis=0).squeeze(axis=1)
         labels = mx.stack([item[1] for item in out], axis=0).squeeze(axis=1)
         token_type_ids = mx.zeros(input_ids.shape, dtype=mx.int32)  # Assuming token_type_ids are not used
-        
+        print("starting to compute loss")
         loss_and_grads_fn = nn.value_and_grad(model, compute_loss)
         loss, grads = loss_and_grads_fn()
         # Update model parameters
+        print("Updating model")
         optimizer.update(model.trainable_parameters(), grads)
 
 
